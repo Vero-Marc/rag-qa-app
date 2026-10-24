@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAG Document Q&A</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --text: #1a1a1a; --muted: #6b7280;
+    --accent: #1f3864; --border: #e2e5e9; --answer-bg: #eef2f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171c; --card: #1e2128; --text: #f0f0f0; --muted: #9aa0ab;
+      --accent: #6d8fd1; --border: #2b2f38; --answer-bg: #232838; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text); padding: 24px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  input[type=file] { margin-bottom: 8px; }
+  select, input[type=text] {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); margin-bottom: 8px; font-size: 0.95rem;
+  }
+  button {
+    background: var(--accent); color: white; border: none; padding: 10px 16px;
+    border-radius: 8px; cursor: pointer; font-size: 0.95rem;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .status { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+  .answer { background: var(--answer-bg); border-radius: 8px; padding: 12px; margin-top: 10px; white-space: pre-wrap; }
+  .sources { margin-top: 10px; font-size: 0.82rem; color: var(--muted); }
+  .source-item { border-left: 3px solid var(--accent); padding: 6px 10px; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📄 RAG Document Q&A</h1>
+  <p class="sub">Upload a PDF, then ask questions. Answers are grounded in the document, with sources cited.</p>
+
+  <div class="card">
+    <strong>1. Upload a document</strong><br/><br/>
+    <input type="file" id="fileInput" accept="application/pdf" />
+    <button id="uploadBtn">Upload & Index</button>
+    <div class="status" id="uploadStatus"></div>
+  </div>
+
+  <div class="card">
+    <strong>2. Ask a question</strong><br/><br/>
+    <select id="docSelect"></select>
+    <input type="text" id="questionInput" placeholder="e.g. What is the termination clause?" />
+    <button id="askBtn">Ask</button>
+    <div class="status" id="chatStatus"></div>
+    <div id="answerBox"></div>
+  </div>
+</div>
+
+<script>
+const API = "";
+
+async function refreshDocs() {
+  const res = await fetch(`${API}/docs-list`);
+  const data = await res.json();
+  const sel = document.getElementById("docSelect");
+  sel.innerHTML = "";
+  if (!data.doc_ids.length) {
+    sel.innerHTML = `<option value="">No documents uploaded yet</option>`;
+    return;
+  }
+  data.doc_ids.forEach(id => {
+    const opt = document.createElement("option");
+    opt.value = id; opt.textContent = id;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById("uploadBtn").onclick = async () => {
+  const fileInput = document.getElementById("fileInput");
+  const statusEl = document.getElementById("uploadStatus");
+  if (!fileInput.files.length) { statusEl.textContent = "Choose a PDF first."; return; }
+
+  const form = new FormData();
+  form.append("file", fileInput.files[0]);
+  statusEl.textContent = "Uploading and indexing... this may take a moment.";
+
+  try {
+    const res = await fetch(`${API}/upload`, { method: "POST", body: form });
+    if (!res.ok) throw new Error((await res.json()).detail || "Upload failed");
+    const data = await res.json();
+    statusEl.textContent = `Indexed "${data.filename}" into ${data.chunks_created} chunks.`;
+    await refreshDocs();
+  } catch (err) {
+    statusEl.textContent = "Error: " + err.message;
+  }
+};
+
+document.getElementById("askBtn").onclick = async () => {
+  const docId = document.getElementById("docSelect").value;
+  const question = document.getElementById("questionInput").value.trim();
+  const statusEl = document.getElementById("chatStatus");
+  const answerBox = document.getElementById("answerBox");
+  answerBox.innerHTML = "";
+
+  if (!docId) { statusEl.textContent = "Upload and select a document first."; return; }
+  if (!question) { statusEl.textContent = "Type a question."; return; }
+
+  statusEl.textContent = "Thinking...";
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_id: docId, question }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Request failed");
+    const data = await res.json();
+    statusEl.textContent = "";
+
+    let html = `<div class="answer">${data.answer}</div>`;
+    if (data.sources && data.sources.length) {
+      html += `<div class="sources"><strong>Sources:</strong>`;
+      data.sources.forEach(s => {
+        html += `<div class="source-item">Page ${s.page} · relevance ${s.relevance_score}<br/>"${s.preview}"</div>`;
+      });
+      html += `</div>`;
+    }
+    answerBox.innerHTML = html;
+  } catch (err) {
+    statusEl.textContent = "Error: " + err.message;
+  }
+};
+
+refreshDocs();
+</script>
+</body>
+</html>

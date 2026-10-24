@@ -1,0 +1,8 @@
+venv/
+venv312/
+.env
+.env.example
+__pycache__/
+*.pyc
+data/uploads/
+data/index/

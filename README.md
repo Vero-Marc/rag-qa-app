@@ -105,3 +105,5 @@ uvicorn main:app --reload
 - Swap OpenAI for AWS Bedrock (Nova Pro) to demonstrate provider flexibility
 - Hybrid search (keyword + vector) for exact-match queries (IDs, codes, etc.)
 - Dockerize for one-command deployment
+  
+<img width="973" height="751" alt="image" src="https://github.com/user-attachments/assets/83fd65a6-0d7b-484c-977a-158ccf147197" />
